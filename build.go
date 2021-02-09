@@ -20,7 +20,7 @@ type builder struct {
 }
 
 // axisPredicate creates a predicate to predicating for this axis node.
-func axisPredicate(root *axisNode) func(NodeNavigator) bool {
+func axisPredicate(root *axisNode) func(iterator, NodeNavigator) bool {
 	// get current axix node type.
 	typ := ElementNode
 	switch root.AxeType {
@@ -41,10 +41,10 @@ func axisPredicate(root *axisNode) func(NodeNavigator) bool {
 		}
 	}
 	nametest := root.LocalName != "" || root.Prefix != ""
-	predicate := func(n NodeNavigator) bool {
+	predicate := func(t iterator, n NodeNavigator) bool {
 		if typ == n.NodeType() || typ == allNode || typ == TextNode {
 			if nametest {
-				if root.LocalName == n.LocalName() && root.Prefix == n.Prefix() {
+				if root.Prefix == t.NamespaceToPrefix(n.NamespaceURI()) && root.LocalName == n.LocalName() {
 					return true
 				}
 			} else {
@@ -78,8 +78,8 @@ func (b *builder) processAxisNode(root *axisNode) (query, error) {
 					qyGrandInput = &contextQuery{}
 				}
 				// fix #20: https://github.com/antchfx/htmlquery/issues/20
-				filter := func(n NodeNavigator) bool {
-					v := predicate(n)
+				filter := func(t iterator, n NodeNavigator) bool {
+					v := predicate(t, n)
 					switch root.Prop {
 					case "text":
 						v = v && n.NodeType() == TextNode
@@ -106,8 +106,8 @@ func (b *builder) processAxisNode(root *axisNode) (query, error) {
 	case "attribute":
 		qyOutput = &attributeQuery{Input: qyInput, Predicate: predicate}
 	case "child":
-		filter := func(n NodeNavigator) bool {
-			v := predicate(n)
+		filter := func(t iterator, n NodeNavigator) bool {
+			v := predicate(t, n)
 			switch root.Prop {
 			case "text":
 				v = v && n.NodeType() == TextNode
@@ -342,7 +342,7 @@ func (b *builder) processFunctionNode(root *functionNode) (query, error) {
 		val := root.FuncName == "true"
 		qyOutput = &functionQuery{
 			Input: b.firstInput,
-			Func: func(_ query, _ iterator) interface{} {
+			Func: func(query, iterator) interface{} {
 				return val
 			},
 		}

@@ -278,6 +278,7 @@ func TestFunction(t *testing.T) {
 }
 
 func TestTransformFunctionReverse(t *testing.T) {
+
 	nodes := selectNodes(html, "reverse(//li)")
 	expectedReversedNodeValues := []string{"", "login", "about", "Home"}
 	if len(nodes) != len(expectedReversedNodeValues) {
@@ -371,6 +372,9 @@ func testEval(t *testing.T, root *TNode, expr string, expected interface{}) {
 }
 
 func testXPath(t *testing.T, root *TNode, expr string, expected string) {
+	if root == nil {
+		t.Fatalf("starting test with a nil node")
+	}
 	node := selectNode(root, expr)
 	if node == nil {
 		t.Fatalf("`%s` returns node is nil", expr)
@@ -416,7 +420,7 @@ func iterateNodes(t *NodeIterator) []*TNode {
 }
 
 func selectNode(root *TNode, expr string) (n *TNode) {
-	t := Select(createNavigator(root), expr)
+	t := createIterator(root, expr)
 	if t.MoveNext() {
 		n = (t.Current().(*TNodeNavigator)).curr
 	}
@@ -424,12 +428,18 @@ func selectNode(root *TNode, expr string) (n *TNode) {
 }
 
 func selectNodes(root *TNode, expr string) []*TNode {
-	t := Select(createNavigator(root), expr)
-	return iterateNodes(t)
+	return iterateNodes(createIterator(root, expr))
 }
 
 func createNavigator(n *TNode) *TNodeNavigator {
+	if n == nil {
+		panic("Creating nil node")
+	}
 	return &TNodeNavigator{curr: n, root: n, attr: -1}
+}
+
+func createIterator(n *TNode, expr string) *NodeIterator {
+	return Select(createNavigator(n), expr)
 }
 
 type Attribute struct {
@@ -483,7 +493,7 @@ func (n *TNodeNavigator) LocalName() string {
 	return n.curr.Data
 }
 
-func (n *TNodeNavigator) Prefix() string {
+func (n *TNodeNavigator) NamespaceURI() string {
 	return ""
 }
 
@@ -582,7 +592,9 @@ func (n *TNodeNavigator) MoveTo(other NodeNavigator) bool {
 	if !ok || node.root != n.root {
 		return false
 	}
-
+	if node.curr == nil {
+		panic("Moving to a nil node")
+	}
 	n.curr = node.curr
 	n.attr = node.attr
 	return true

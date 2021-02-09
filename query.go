@@ -9,6 +9,9 @@ import (
 
 type iterator interface {
 	Current() NodeNavigator
+
+	// Maps a namespace to a prefix
+	NamespaceToPrefix(string) string
 }
 
 // An XPath query interface.
@@ -65,7 +68,7 @@ type ancestorQuery struct {
 
 	Self      bool
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (a *ancestorQuery) Select(t iterator) NodeNavigator {
@@ -80,12 +83,12 @@ func (a *ancestorQuery) Select(t iterator) NodeNavigator {
 			a.iterator = func() NodeNavigator {
 				if first && a.Self {
 					first = false
-					if a.Predicate(node) {
+					if a.Predicate(t, node) {
 						return node
 					}
 				}
 				for node.MoveToParent() {
-					if !a.Predicate(node) {
+					if !a.Predicate(t, node) {
 						continue
 					}
 					return node
@@ -107,8 +110,8 @@ func (a *ancestorQuery) Evaluate(t iterator) interface{} {
 	return a
 }
 
-func (a *ancestorQuery) Test(n NodeNavigator) bool {
-	return a.Predicate(n)
+func (a *ancestorQuery) Test(t iterator, n NodeNavigator) bool {
+	return a.Predicate(t, n)
 }
 
 func (a *ancestorQuery) Clone() query {
@@ -120,7 +123,7 @@ type attributeQuery struct {
 	iterator func() NodeNavigator
 
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (a *attributeQuery) Select(t iterator) NodeNavigator {
@@ -137,7 +140,7 @@ func (a *attributeQuery) Select(t iterator) NodeNavigator {
 					if !onAttr {
 						return nil
 					}
-					if a.Predicate(node) {
+					if a.Predicate(t, node) {
 						return node
 					}
 				}
@@ -157,8 +160,8 @@ func (a *attributeQuery) Evaluate(t iterator) interface{} {
 	return a
 }
 
-func (a *attributeQuery) Test(n NodeNavigator) bool {
-	return a.Predicate(n)
+func (a *attributeQuery) Test(t iterator, n NodeNavigator) bool {
+	return a.Predicate(t, n)
 }
 
 func (a *attributeQuery) Clone() query {
@@ -171,7 +174,7 @@ type childQuery struct {
 	iterator func() NodeNavigator
 
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (c *childQuery) Select(t iterator) NodeNavigator {
@@ -190,7 +193,7 @@ func (c *childQuery) Select(t iterator) NodeNavigator {
 						return nil
 					}
 					first = false
-					if c.Predicate(node) {
+					if c.Predicate(t, node) {
 						return node
 					}
 				}
@@ -211,8 +214,8 @@ func (c *childQuery) Evaluate(t iterator) interface{} {
 	return c
 }
 
-func (c *childQuery) Test(n NodeNavigator) bool {
-	return c.Predicate(n)
+func (c *childQuery) Test(t iterator, n NodeNavigator) bool {
+	return c.Predicate(t, n)
 }
 
 func (c *childQuery) Clone() query {
@@ -232,7 +235,7 @@ type descendantQuery struct {
 
 	Self      bool
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (d *descendantQuery) Select(t iterator) NodeNavigator {
@@ -250,7 +253,7 @@ func (d *descendantQuery) Select(t iterator) NodeNavigator {
 			d.iterator = func() NodeNavigator {
 				if first && d.Self {
 					first = false
-					if d.Predicate(node) {
+					if d.Predicate(t, node) {
 						d.posit = 1
 						positmap[d.level] = 1
 						return node
@@ -273,7 +276,7 @@ func (d *descendantQuery) Select(t iterator) NodeNavigator {
 							d.level = d.level - 1
 						}
 					}
-					if d.Predicate(node) {
+					if d.Predicate(t, node) {
 						positmap[d.level]++
 						d.posit = positmap[d.level]
 						return node
@@ -295,8 +298,8 @@ func (d *descendantQuery) Evaluate(t iterator) interface{} {
 	return d
 }
 
-func (d *descendantQuery) Test(n NodeNavigator) bool {
-	return d.Predicate(n)
+func (d *descendantQuery) Test(t iterator, n NodeNavigator) bool {
+	return d.Predicate(t, n)
 }
 
 // position returns a position of current NodeNavigator.
@@ -319,7 +322,7 @@ type followingQuery struct {
 
 	Input     query
 	Sibling   bool // The matching sibling node of current node.
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (f *followingQuery) Select(t iterator) NodeNavigator {
@@ -337,7 +340,7 @@ func (f *followingQuery) Select(t iterator) NodeNavigator {
 						if !node.MoveToNext() {
 							return nil
 						}
-						if f.Predicate(node) {
+						if f.Predicate(t, node) {
 							f.posit++
 							return node
 						}
@@ -382,8 +385,8 @@ func (f *followingQuery) Evaluate(t iterator) interface{} {
 	return f
 }
 
-func (f *followingQuery) Test(n NodeNavigator) bool {
-	return f.Predicate(n)
+func (f *followingQuery) Test(t iterator, n NodeNavigator) bool {
+	return f.Predicate(t, n)
 }
 
 func (f *followingQuery) Clone() query {
@@ -400,7 +403,7 @@ type precedingQuery struct {
 	posit     int
 	Input     query
 	Sibling   bool // The matching sibling node of current node.
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (p *precedingQuery) Select(t iterator) NodeNavigator {
@@ -418,7 +421,7 @@ func (p *precedingQuery) Select(t iterator) NodeNavigator {
 						for !node.MoveToPrevious() {
 							return nil
 						}
-						if p.Predicate(node) {
+						if p.Predicate(t, node) {
 							p.posit++
 							return node
 						}
@@ -463,8 +466,8 @@ func (p *precedingQuery) Evaluate(t iterator) interface{} {
 	return p
 }
 
-func (p *precedingQuery) Test(n NodeNavigator) bool {
-	return p.Predicate(n)
+func (p *precedingQuery) Test(t iterator, n NodeNavigator) bool {
+	return p.Predicate(t, n)
 }
 
 func (p *precedingQuery) Clone() query {
@@ -478,7 +481,7 @@ func (p *precedingQuery) position() int {
 // parentQuery is an XPath parent node query.(parent::*)
 type parentQuery struct {
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (p *parentQuery) Select(t iterator) NodeNavigator {
@@ -488,7 +491,7 @@ func (p *parentQuery) Select(t iterator) NodeNavigator {
 			return nil
 		}
 		node = node.Copy()
-		if node.MoveToParent() && p.Predicate(node) {
+		if node.MoveToParent() && p.Predicate(t, node) {
 			return node
 		}
 	}
@@ -503,14 +506,14 @@ func (p *parentQuery) Clone() query {
 	return &parentQuery{Input: p.Input.Clone(), Predicate: p.Predicate}
 }
 
-func (p *parentQuery) Test(n NodeNavigator) bool {
-	return p.Predicate(n)
+func (p *parentQuery) Test(t iterator, n NodeNavigator) bool {
+	return p.Predicate(t, n)
 }
 
 // selfQuery is an Self node query.(self::*)
 type selfQuery struct {
 	Input     query
-	Predicate func(NodeNavigator) bool
+	Predicate func(iterator, NodeNavigator) bool
 }
 
 func (s *selfQuery) Select(t iterator) NodeNavigator {
@@ -520,7 +523,7 @@ func (s *selfQuery) Select(t iterator) NodeNavigator {
 			return nil
 		}
 
-		if s.Predicate(node) {
+		if s.Predicate(t, node) {
 			return node
 		}
 	}
@@ -531,8 +534,8 @@ func (s *selfQuery) Evaluate(t iterator) interface{} {
 	return s
 }
 
-func (s *selfQuery) Test(n NodeNavigator) bool {
-	return s.Predicate(n)
+func (s *selfQuery) Test(t iterator, n NodeNavigator) bool {
+	return s.Predicate(t, n)
 }
 
 func (s *selfQuery) Clone() query {
@@ -610,7 +613,7 @@ type functionQuery struct {
 	Func  func(query, iterator) interface{} // The xpath function.
 }
 
-func (f *functionQuery) Select(t iterator) NodeNavigator {
+func (f *functionQuery) Select(iterator) NodeNavigator {
 	return nil
 }
 
@@ -624,7 +627,7 @@ func (f *functionQuery) Clone() query {
 	return &functionQuery{Input: f.Input.Clone(), Func: f.Func}
 }
 
-// transformFunctionQuery diffs from functionQuery where the latter computes a scalar
+// transformFunctionQuery diffs from functionQuery where the later computes a scalar
 // value (number,string,boolean) for the current NodeNavigator node while the former
 // (transformFunctionQuery) performs a mapping or transform of the current NodeNavigator
 // and returns a new NodeNavigator. It is used for non-scalar XPath functions such as
@@ -882,7 +885,7 @@ func getHashCode(n NodeNavigator) uint64 {
 			sb.WriteString(fmt.Sprintf("-%d", d))
 		}
 	case ElementNode:
-		sb.WriteString(n.Prefix() + n.LocalName())
+		sb.WriteString(n.NamespaceURI() + ":" + n.LocalName())
 		d := 1
 		for n.MoveToPrevious() {
 			d++

@@ -33,11 +33,11 @@ type NodeNavigator interface {
 	// NodeType returns the XPathNodeType of the current node.
 	NodeType() NodeType
 
+	// NamespaceURI gets the namespace uri of the current node.
+	NamespaceURI() string
+
 	// LocalName gets the Name of the current node.
 	LocalName() string
-
-	// Prefix returns namespace prefix associated with the current node.
-	Prefix() string
 
 	// Value gets the value of current node.
 	Value() string
@@ -72,8 +72,9 @@ type NodeNavigator interface {
 
 // NodeIterator holds all matched Node object.
 type NodeIterator struct {
-	node  NodeNavigator
-	query query
+	node      NodeNavigator
+	query     query
+	ns2prefix func(string) string
 }
 
 // Current returns current node which matched.
@@ -93,14 +94,8 @@ func (t *NodeIterator) MoveNext() bool {
 	return false
 }
 
-// Select selects a node set using the specified XPath expression.
-// This method is deprecated, recommend using Expr.Select() method instead.
-func Select(root NodeNavigator, expr string) *NodeIterator {
-	exp, err := Compile(expr)
-	if err != nil {
-		panic(err)
-	}
-	return exp.Select(root)
+func (t *NodeIterator) NamespaceToPrefix(n string) string {
+	return t.ns2prefix(n)
 }
 
 // Expr is an XPath expression for query.
@@ -109,26 +104,51 @@ type Expr struct {
 	q query
 }
 
-type iteratorFunc func() NodeNavigator
+// Select selects a node set using the specified XPath expression.
+func (expr *Expr) SelectWithNS(root NodeNavigator, ns func(string) string) *NodeIterator {
+	return &NodeIterator{query: expr.q.Clone(), node: root, ns2prefix: ns}
+}
 
-func (f iteratorFunc) Current() NodeNavigator {
-	return f()
+func (expr *Expr) Select(root NodeNavigator) *NodeIterator {
+	return expr.SelectWithNS(root, func(ns string) string { return ns })
+}
+
+type EvaluateIterator struct {
+	root      NodeNavigator
+	ns2prefix func(string) string
+}
+
+func (i *EvaluateIterator) Current() NodeNavigator {
+	return i.root
+}
+func (i *EvaluateIterator) NamespaceToPrefix(ns string) string {
+	return i.ns2prefix(ns)
 }
 
 // Evaluate returns the result of the expression.
-// The result type of the expression is one of the follow: bool,float64,string,NodeIterator).
-func (expr *Expr) Evaluate(root NodeNavigator) interface{} {
-	val := expr.q.Evaluate(iteratorFunc(func() NodeNavigator { return root }))
+// The result type of the expression is one of the follow: bool,float64,string).
+func (expr *Expr) EvaluateWithNS(root NodeNavigator, ns func(string) string) interface{} {
+	it := EvaluateIterator{root: root, ns2prefix: ns}
+	val := expr.q.Evaluate(&it)
 	switch val.(type) {
 	case query:
-		return &NodeIterator{query: expr.q.Clone(), node: root}
+		return expr.SelectWithNS(root, ns)
 	}
 	return val
 }
 
+func (expr *Expr) Evaluate(root NodeNavigator) interface{} {
+	return expr.EvaluateWithNS(root, func(ns string) string { return ns })
+}
+
 // Select selects a node set using the specified XPath expression.
-func (expr *Expr) Select(root NodeNavigator) *NodeIterator {
-	return &NodeIterator{query: expr.q.Clone(), node: root}
+// This method is deprecated, recommend using Expr.Select() method instead.
+func Select(root NodeNavigator, expr string) *NodeIterator {
+	exp, err := Compile(expr)
+	if err != nil {
+		panic(err)
+	}
+	return exp.Select(root)
 }
 
 // String returns XPath expression string.

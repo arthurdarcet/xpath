@@ -26,14 +26,14 @@ var builderPool = sync.Pool{New: func() interface{} {
 
 // The XPath function list.
 
-func predicate(q query) func(NodeNavigator) bool {
+func predicate(q query) func(iterator, NodeNavigator) bool {
 	type Predicater interface {
-		Test(NodeNavigator) bool
+		Test(iterator, NodeNavigator) bool
 	}
 	if p, ok := q.(Predicater); ok {
 		return p.Test
 	}
-	return func(NodeNavigator) bool { return true }
+	return func(iterator, NodeNavigator) bool { return true }
 }
 
 // positionFunc is a XPath Node Set functions position().
@@ -44,7 +44,7 @@ func positionFunc(q query, t iterator) interface{} {
 	)
 	test := predicate(q)
 	for node.MoveToPrevious() {
-		if test(node) {
+		if test(t, node) {
 			count++
 		}
 	}
@@ -60,7 +60,7 @@ func lastFunc(q query, t iterator) interface{} {
 	node.MoveToFirst()
 	test := predicate(q)
 	for {
-		if test(node) {
+		if test(t, node) {
 			count++
 		}
 		if !node.MoveToNext() {
@@ -78,7 +78,7 @@ func countFunc(q query, t iterator) interface{} {
 	switch typ := q.Evaluate(t).(type) {
 	case query:
 		for node := typ.Select(t); node != nil; node = typ.Select(t) {
-			if test(node) {
+			if test(t, node) {
 				count++
 			}
 		}
@@ -161,11 +161,11 @@ func nameFunc(arg query) func(query, iterator) interface{} {
 				return ""
 			}
 		}
-		ns := v.Prefix()
-		if ns == "" {
+		space := v.NamespaceURI()
+		if space == "" {
 			return v.LocalName()
 		}
-		return ns + ":" + v.LocalName()
+		return t.NamespaceToPrefix(space) + ":" + v.LocalName()
 	}
 }
 
@@ -198,15 +198,7 @@ func namespaceFunc(arg query) func(query, iterator) interface{} {
 				return ""
 			}
 		}
-		// fix about namespace-uri() bug: https://github.com/antchfx/xmlquery/issues/22
-		// TODO: In the next version, add NamespaceURL() to the NodeNavigator interface.
-		type namespaceURL interface {
-			NamespaceURL() string
-		}
-		if f, ok := v.(namespaceURL); ok {
-			return f.NamespaceURL()
-		}
-		return v.Prefix()
+		return v.NamespaceURI()
 	}
 }
 
